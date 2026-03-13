@@ -26,7 +26,7 @@ use App\Http\Controllers\ResultadoController;
 */
 
 Route::get('/', function () {
-    return view('welcome');
+    return redirect()->route('login');
 });
 
 Auth::routes();
@@ -79,6 +79,9 @@ Route::resource('resultados', ResultadoController::class);
 Route::get('resultados/mesa/{mesa}/edit', [ResultadoController::class, 'edit'])->name('resultados.mesa.edit');
 Route::put('resultados/mesa/{mesa}', [ResultadoController::class, 'update'])->name('resultados.mesa.update');
 Route::post('resultados/{resultado}/estado-acta', [ResultadoController::class, 'updateEstadoActa'])->name('resultados.estado-acta');
+Route::get('actas/{id}/detalles', [ResultadoController::class, 'detallesActa'])->name('actas.detalles');
+Route::post('actas/{id}/aprobar', [ResultadoController::class, 'aprobarActa'])->name('actas.aprobar');
+Route::post('actas/{id}/revisar', [ResultadoController::class, 'revisarActa'])->name('actas.revisar');
 
 // API para filtros
 Route::get('api/provincias-por-departamento/{departamentoId}', [ProvinciaController::class, 'getByDepartamento']);

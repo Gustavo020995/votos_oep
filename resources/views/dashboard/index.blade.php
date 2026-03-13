@@ -75,19 +75,66 @@
         </div>
       </div>
     </div>
-
-    <!-- Distribución de Votos -->
-    <div class="row">
+ <!-- Detalle de Estadísticas (Estilo de la imagen) -->
+    <div class="row mt-4">
       <div class="col-md-6">
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title">Distribución de Votos</h3>
+            <h3 class="card-title">Detalle</h3>
           </div>
           <div class="card-body">
-            <canvas id="votosChart" width="400" height="200"></canvas>
+            <table class="table table-bordered">
+              <tr>
+                <td><strong>Total</strong></td>
+                <td class="text-right">Percentage</td>
+              </tr>
+              <tr>
+                <td>Votos Válidos</td>
+                <td class="text-right">{{ number_format($estadisticasGenerales['votos_validos']) }} ({{ number_format(($estadisticasGenerales['votos_validos'] / $estadisticasGenerales['votos_emitidos']) * 100, 2) }}%)</td>
+              </tr>
+              <tr>
+                <td>Votos Blancos</td>
+                <td class="text-right">{{ number_format($estadisticasGenerales['votos_blancos']) }} ({{ number_format(($estadisticasGenerales['votos_blancos'] / $estadisticasGenerales['votos_emitidos']) * 100, 2) }}%)</td>
+              </tr>
+              <tr>
+                <td>Votos Nulos</td>
+                <td class="text-right">{{ number_format($estadisticasGenerales['votos_nulos']) }} ({{ number_format(($estadisticasGenerales['votos_nulos'] / $estadisticasGenerales['votos_emitidos']) * 100, 2) }}%)</td>
+              </tr>
+              <tr>
+                <td><strong>Votos Emitidos</strong></td>
+                <td class="text-right"><strong>{{ number_format($estadisticasGenerales['votos_emitidos']) }}</strong></td>
+              </tr>
+              <tr>
+                <td>Ciudadanos Habilitados por Actas Computadas</td>
+                <td class="text-right">{{ number_format($estadisticasGenerales['total_inscritos']) }}</td>
+              </tr>
+              <tr>
+                <td>Total Ciudadanos Habilitados</td>
+                <td class="text-right">{{ number_format($estadisticasGenerales['total_inscritos']) }}</td>
+              </tr>
+              <tr>
+                <td>Total Actas Computadas</td>
+                <td class="text-right">{{ $estadisticasGenerales['mesas_escrutadas'] }} (100%)</td>
+              </tr>
+              <tr>
+                <td>Total Actas Anuladas</td>
+                <td class="text-right">0 (0%)</td>
+              </tr>
+              <tr>
+                <td>Total Actas Habilitadas</td>
+                <td class="text-right">{{ $estadisticasGenerales['total_mesas'] }} (100%)</td>
+              </tr>
+              <tr>
+                <td>Participación por Actas Computadas</td>
+                <td class="text-right">{{ $estadisticasGenerales['participacion'] }}%</td>
+              </tr>
+            </table>
           </div>
         </div>
       </div>
+
+    <!-- Distribución de Votos -->
+ 
       <div class="col-md-6">
         <div class="card">
           <div class="card-header">

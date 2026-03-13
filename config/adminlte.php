@@ -14,7 +14,7 @@ return [
     |
     */
 
-    'title' => 'AdminLTE 3',
+    'title' => 'Sistema de Votos OEP',
     'title_prefix' => '',
     'title_postfix' => '',
 
@@ -257,7 +257,7 @@ return [
     */
 
     'use_route_url' => false,
-    'dashboard_url' => 'home',
+    'dashboard_url' => 'dashboard',
     'logout_url' => 'logout',
     'login_url' => 'login',
     'register_url' => 'register',
@@ -313,7 +313,7 @@ return [
         ],
 
         // Sidebar items:
-        [
+       /* [
             'type' => 'sidebar-menu-search',
             'text' => 'search',
         ],
@@ -323,7 +323,7 @@ return [
             'can' => 'manage-blog',
         ],
         
-        ['header' => 'account_settings'],
+        ['header' => 'account_settings'],*/
         [
             'text' => 'profile',
             'url' => 'users',

@@ -9,44 +9,191 @@ use App\Models\TipoVoto;
 use App\Models\VotoEspecial;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 
 class ResultadoController extends Controller
 {
-    public function index()
-{
- // Obtener todos los resultados con relaciones (menos eficiente pero funciona)
-    $resultados = Resultado::with([
+    public function index(Request $request)
+    {
+        // Obtener todos los resultados con relaciones
+        $resultados = Resultado::with([
             'mesa.recinto.localidad.municipio.provincia.departamento', 
             'candidato'
-        ])
-        ->get();
+        ])->get();
 
-    // Agrupar manualmente por número de acta
-    $actasAgrupadas = $resultados->groupBy('numero_acta')->map(function($grupoActa) {
-        $primerRegistro = $grupoActa->first();
-        $primerRegistro->total_votos_acta = $grupoActa->sum('votos');
-        $primerRegistro->cantidad_registros = $grupoActa->count();
-        return $primerRegistro;
-    });
+        // Agrupar manualmente por número de acta
+        $actasAgrupadas = $resultados->groupBy('numero_acta')->map(function($grupoActa) {
+            $primerRegistro = $grupoActa->first();
+            $primerRegistro->total_votos_acta = $grupoActa->sum('votos');
+            $primerRegistro->cantidad_registros = $grupoActa->count();
+            return $primerRegistro;
+        });
 
-    // Paginar manualmente
-    $page = request()->get('page', 1);
-    $perPage = 20;
-    $actas = new \Illuminate\Pagination\LengthAwarePaginator(
-        $actasAgrupadas->forPage($page, $perPage)->values(),
-        $actasAgrupadas->count(),
-        $perPage,
-        $page,
-        ['path' => request()->url(), 'query' => request()->query()]
-    );
+        // Aplicar filtros si existen
+        if ($request->has('estado') && !empty($request->estado)) {
+            $actasAgrupadas = $actasAgrupadas->filter(function($acta) use ($request) {
+                return strtolower($acta->estado_acta) == strtolower($request->estado);
+            });
+        }
 
-    $totalActas = $actasAgrupadas->count();
-    $actasAprobadas = $actasAgrupadas->where('estado_acta', 'aprobada')->count();
-    $actasPendientes = $actasAgrupadas->where('estado_acta', 'pendiente')->count();
-    $actasObservadas = $actasAgrupadas->where('estado_acta', 'observada')->count();
+        if ($request->has('search') && !empty($request->search)) {
+            $search = $request->search;
+            $actasAgrupadas = $actasAgrupadas->filter(function($acta) use ($search) {
+                return str_contains(strtolower($acta->numero_acta), strtolower($search)) ||
+                       str_contains(strtolower($acta->mesa->numero_mesa), strtolower($search)) ||
+                       str_contains(strtolower($acta->mesa->codigo_mesa), strtolower($search));
+            });
+        }
 
-    return view('resultados.index', compact('actas', 'totalActas', 'actasAprobadas', 'actasPendientes', 'actasObservadas'));}
+        // Paginar manualmente
+        $page = $request->get('page', 1);
+        $perPage = 20;
+        $actas = new \Illuminate\Pagination\LengthAwarePaginator(
+            $actasAgrupadas->forPage($page, $perPage)->values(),
+            $actasAgrupadas->count(),
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
 
+        $totalActas = $actasAgrupadas->count();
+        $actasAprobadas = $actasAgrupadas->where('estado_acta', 'aprobada')->count();
+        $actasPendientes = $actasAgrupadas->where('estado_acta', 'pendiente')->count();
+        $actasObservadas = $actasAgrupadas->where('estado_acta', 'observada')->count();
+
+        return view('resultados.index', compact(
+            'actas', 
+            'totalActas', 
+            'actasAprobadas', 
+            'actasPendientes', 
+            'actasObservadas'
+        ));
+    }
+     public function detallesActa($id)
+    {
+        try {
+            // Buscar el resultado por ID
+            $resultado = Resultado::with([
+                'mesa.recinto.localidad.municipio.provincia.departamento',
+                'candidato'
+            ])->findOrFail($id);
+            
+            // Obtener todos los resultados con el mismo número de acta
+            $actaCompleta = Resultado::with('candidato')
+                ->where('numero_acta', $resultado->numero_acta)
+                ->get();
+                
+            // Obtener votos especiales de la mesa
+            $votosEspeciales = VotoEspecial::with('tipoVoto')
+                ->where('mesa_id', $resultado->mesa_id)
+                ->get();
+            
+            $totalVotos = $actaCompleta->sum('votos') + $votosEspeciales->sum('cantidad');
+
+            if (request()->ajax()) {
+                return view('resultados.detalles', compact(
+                    'resultado', 
+                    'actaCompleta', 
+                    'votosEspeciales', 
+                    'totalVotos'
+                ))->render();
+            }
+
+            return redirect()->route('resultados.index');
+
+        } catch (\Exception $e) {
+            Log::error('Error en detallesActa: ' . $e->getMessage());
+            
+            if (request()->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Error al cargar detalles: ' . $e->getMessage()
+                ], 500);
+            }
+            
+            return redirect()->back()->with('error', 'Error al cargar detalles');
+        }
+    }
+
+    /**
+     * NUEVO: Aprobar acta vía AJAX
+     */
+    public function aprobarActa(Request $request, $id)
+    {
+        try {
+            $resultado = Resultado::findOrFail($id);
+            
+            // Actualizar todos los resultados con el mismo número de acta
+            Resultado::where('numero_acta', $resultado->numero_acta)
+                ->update([
+                    'estado_acta' => 'aprobada',
+                    'observaciones' => $request->observaciones ?? null
+                ]);
+
+            if ($request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Acta aprobada correctamente',
+                    'estado' => 'aprobada'
+                ]);
+            }
+
+            return redirect()->back()->with('success', 'Acta aprobada correctamente');
+
+        } catch (\Exception $e) {
+            Log::error('Error en aprobarActa: ' . $e->getMessage());
+            
+            if ($request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Error al aprobar el acta: ' . $e->getMessage()
+                ], 500);
+            }
+            
+            return redirect()->back()->with('error', 'Error al aprobar el acta');
+        }
+    }
+    public function revisarActa(Request $request, $id)
+    {
+        try {
+            $request->validate([
+                'observaciones' => 'required|string|max:500'
+            ]);
+
+            $resultado = Resultado::findOrFail($id);
+            
+            // Actualizar todos los resultados con el mismo número de acta
+            Resultado::where('numero_acta', $resultado->numero_acta)
+                ->update([
+                    'estado_acta' => 'observada',
+                    'observaciones' => $request->observaciones
+                ]);
+
+            if ($request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Acta revisada correctamente',
+                    'estado' => 'observada'
+                ]);
+            }
+
+            return redirect()->back()->with('success', 'Acta revisada correctamente');
+
+        } catch (\Exception $e) {
+            Log::error('Error en revisarActa: ' . $e->getMessage());
+            
+            if ($request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Error al revisar el acta: ' . $e->getMessage()
+                ], 500);
+            }
+            
+            return redirect()->back()->with('error', 'Error al revisar el acta');
+        }
+    }
+
+    
     public function create()
     {
         $mesas = Mesa::with('recinto.localidad.municipio.provincia.departamento')
@@ -286,20 +433,41 @@ class ResultadoController extends Controller
 
     public function updateEstadoActa(Request $request, Resultado $resultado)
     {
-        $request->validate([
-            'estado_acta' => 'required|in:pendiente,aprobada,rechazada,observada',
-            'observaciones' => 'nullable|string|max:500'
-        ]);
-
-        // Actualizar todos los resultados con el mismo número de acta
-        Resultado::where('numero_acta', $resultado->numero_acta)
-            ->update([
-                'estado_acta' => $request->estado_acta,
-                'observaciones' => $request->observaciones
+        try {
+            $request->validate([
+                'estado_acta' => 'required|in:pendiente,aprobada,rechazada,observada',
+                'observaciones' => 'nullable|string|max:500'
             ]);
 
-        return redirect()->back()
-            ->with('success', 'Estado del acta actualizado exitosamente.');
+            // Actualizar todos los resultados con el mismo número de acta
+            Resultado::where('numero_acta', $resultado->numero_acta)
+                ->update([
+                    'estado_acta' => $request->estado_acta,
+                    'observaciones' => $request->observaciones
+                ]);
+
+            if ($request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Estado actualizado correctamente',
+                    'estado' => $request->estado_acta
+                ]);
+            }
+
+            return redirect()->back()->with('success', 'Estado actualizado correctamente.');
+
+        } catch (\Exception $e) {
+            Log::error('Error en updateEstadoActa: ' . $e->getMessage());
+            
+            if ($request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Error: ' . $e->getMessage()
+                ], 500);
+            }
+            
+            return redirect()->back()->with('error', 'Error: ' . $e->getMessage());
+        }
     }
 
     public function destroy(Resultado $resultado)
